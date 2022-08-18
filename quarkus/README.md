@@ -1,41 +1,35 @@
-# quarkus Project
+# Quarkus
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+https://quarkus.io/guides/maven-tooling
 
-If you want to learn more about Quarkus, please visit its website: https://quarkus.io/ .
-
-## Running the application in dev mode
-
-You can run your application in dev mode that enables live coding using:
-```shell script
-./mvnw compile quarkus:dev
+```console
+mvn io.quarkus.platform:quarkus-maven-plugin:2.11.2.Final:create
 ```
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at http://localhost:8080/q/dev/.
+For running quarkus un dev mode and you can change the code in real time, run next comand
 
-## Packaging and running the application
-
-The application can be packaged using:
-```shell script
-./mvnw package
-```
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
-
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
-
-If you want to build an _über-jar_, execute the following command:
-```shell script
-./mvnw package -Dquarkus.package.type=uber-jar
+```console
+mvn compile quarkus:dev
 ```
 
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
+List extensions of Quarkus & add extensions for DB
 
-## Creating a native executable
+```console
+mvn quarkus:list-extensions
+mvn quarkus:add-extensions -Dextensions="quarkus-hibernate-orm-panache, quarkus-jdbc-mariadb"
+```
 
-You can create a native executable using: 
-```shell script
-./mvnw package -Pnative
+Add extension for Rest
+
+```console
+mvn quarkus:add-extensions -Dextensions="quarkus-resteasy-reactive-jackson"
+```
+
+Before to compile project it's important download graalvm from https://github.com/graalvm/mandrel/releases/tag/mandrel-22.1.0.0-Final
+```console
+$ tar -xf mandrel-java11-linux-amd64-22.1.0.0-Final.tar.gz
+$ export JAVA_HOME="$( pwd )/mandrel-java11-22.1.0.0-Final"
+$ export GRAALVM_HOME="${JAVA_HOME}"
 ```
 
 Or, if you don't have GraalVM installed, you can run the native executable build in a container using: 
@@ -43,14 +37,62 @@ Or, if you don't have GraalVM installed, you can run the native executable build
 ./mvnw package -Pnative -Dquarkus.native.container-build=true
 ```
 
-You can then execute your native executable with: `./target/quarkus-1.0.0-SNAPSHOT-runner`
+Compile proyect in knative container
+```console
+./mvnw package -Pnative -Dquarkus.native.container-runtime=podman -Dquarkus.native.container-build=true
+podman build -t quarkus-jvm -f src/main/docker/Dockerfile.jvm .
+podman build -t quarkus-native -f src/main/docker/Dockerfile.native .
+ ```
 
-If you want to learn more about building native executables, please consult https://quarkus.io/guides/maven-tooling.
+ Run images in the same pod and use 127.0.0.1 like a host
+ ```console
+$ podman pod create --name mariadb-quarkus -p 3306:3306 -p 8081:8080 
 
-## Provided Code
+$ podman run -d --pod mariadb-quarkus --name mariadb -e MARIADB_USER=mariadb -e MARIADB_PASSWORD=mariadb -e MARIADB_ROOT_PASSWORD=mariadb -e MARIADB_DATABASE=quarkus mariadb:latest
 
-### RESTEasy Reactive
+$ podman run -d --name quarkus-jvm --pod mariadb-quarkus -e DB_USER=mariadb -e DB_KIND=mariadb -e DB_URL=jdbc:mariadb://127.0.0.1:3306/quarkus -e DB_PASSWORD=mariadb localhost/quarkus-jvm
+or
+$ podman run -d --name quarkus-native --pod mariadb-quarkus -e DB_USER=mariadb -e DB_KIND=mariadb -e DB_URL=jdbc:mariadb://127.0.0.1:3306/quarkus -e DB_PASSWORD=mariadb localhost/quarkus-native
+ ```
 
-Easily start your Reactive RESTful Web Services
+if you want to check stadistics run ```podman stats quarkus-...```
 
-[Related guide section...](https://quarkus.io/guides/getting-started-reactive#reactive-jax-rs-resources)
+Now we run images in diferent pods
+```console
+$ podman network create --name quarkus
+$ podman pod create --name mariadbQ --network quarkus -p 3306:3306
+$ podman pod create --name quarkusQ --network quarkus -p 8082:8080
+
+$ podman run -d --pod mariadbQ --name mariadbD -e MARIADB_USER=mariadb -e MARIADB_PASSWORD=mariadb -e MARIADB_ROOT_PASSWORD=mariadb -e MARIADB_DATABASE=quarkus mariadb:latest
+
+$ podman run -d --name quarkus-jvmD --pod quarkusQ -e DB_USER=mariadb -e DB_KIND=mariadb -e DB_URL=jdbc:mariadb://mariadbQ:3306/quarkus -e DB_PASSWORD=mariadb localhost/quarkus-jvm
+
+or
+
+$ podman run -d --name quarkus-nativeD --pod quarkusQ -e DB_USER=mariadb -e DB_KIND=mariadb -e DB_URL=jdbc:mariadb://mariadbQ:3306/quarkus -e DB_PASSWORD=mariadb localhost/quarkus-native
+```
+
+Deploy in openshift
+```console
+oc new-build --binary --name=quarkus-app -l app=quarkus-app
+oc patch bc quarkus-app -p '{"spec":{"strategy":{"dockerStrategy":{"dockerfilePath":"src/main/docker/Dockerfile.native"}}}}'
+oc start-build quarkus-app --from-dir=. --follow
+oc new-app --image-stream=quarkus-app:latest -e DB_USER=mariadb -e DB_KIND=mariadb -e DB_URL=jdbc:mariadb://mariadb:3306/quarkus -e DB_PASSWORD=mariadb
+oc expose service quarkus-app
+```
+
+Test app
+```console
+curl -X POST http://quarkus-app-jvm-gchavezt-dev.apps.sandbox.x8i5.p1.openshiftapps.com/persons -H "Content-Type: application/json" -d '{"nombre": "Ger", "apellido": "Chavez"}'
+
+response
+
+{"id":1,"nombre":"Ger","apellido":"Chavez"}
+```
+
+![observe](metricas-quarkus.png "Observe")
+
+References
+https://github.com/graalvm/mandrel/releases/tag/mandrel-22.1.0.0-Final
+https://access.redhat.com/documentation/en-us/red_hat_build_of_quarkus/1.7/html/developing_and_compiling_your_quarkus_applications_with_apache_maven/proc-producing-native-executable_quarkus-maven
+https://quarkus.io/guides/hibernate-orm-panache
