@@ -72,13 +72,22 @@ or
 $ podman run -d --name quarkus-nativeD --pod quarkusQ -e DB_USER=mariadb -e DB_KIND=mariadb -e DB_URL=jdbc:mariadb://mariadbQ:3306/quarkus -e DB_PASSWORD=mariadb localhost/quarkus-native
 ```
 
-Deploy in openshift
+Deploy in openshift with Dockerfile.jvm
 ```console
-oc new-build --binary --name=quarkus-app -l app=quarkus-app
-oc patch bc quarkus-app -p '{"spec":{"strategy":{"dockerStrategy":{"dockerfilePath":"src/main/docker/Dockerfile.native"}}}}'
-oc start-build quarkus-app --from-dir=. --follow
-oc new-app --image-stream=quarkus-app:latest -e DB_USER=mariadb -e DB_KIND=mariadb -e DB_URL=jdbc:mariadb://mariadb:3306/quarkus -e DB_PASSWORD=mariadb
-oc expose service quarkus-app
+oc new-build --binary --name=quarkus-jvm -l app=quarkus-jvm
+oc patch bc quarkus-jvm -p '{"spec":{"strategy":{"dockerStrategy":{"dockerfilePath":"src/main/docker/Dockerfile.jvm"}}}}'
+oc start-build quarkus-jvm --from-dir=. --follow
+oc new-app --image-stream=quarkus-jvm:latest -e DB_USER=mariadb -e DB_KIND=mariadb -e DB_URL=jdbc:mariadb://mariadb:3306/quarkus -e DB_PASSWORD=mariadb
+oc expose service quarkus-jvm
+```
+
+Deploy in openshift with Dockerfile.native
+```console
+oc new-build --binary --name=quarkus-native -l app=quarkus-native
+oc patch bc quarkus-native -p '{"spec":{"strategy":{"dockerStrategy":{"dockerfilePath":"src/main/docker/Dockerfile.native"}}}}'
+oc start-build quarkus-native --from-dir=. --follow
+oc new-app --image-stream=quarkus-native:latest -e DB_USER=mariadb -e DB_KIND=mariadb -e DB_URL=jdbc:mariadb://mariadb:3306/quarkus -e DB_PASSWORD=mariadb
+oc expose service quarkus-native
 ```
 
 Test app
