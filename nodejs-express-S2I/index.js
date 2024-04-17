@@ -4,7 +4,7 @@ const app = express();
 app.get('/', (req, res) => {
   res
     .status(200)
-    .send('Hello, RedHat!')
+    .send('Hello, SENASICA!')
     .end();
 });
  
